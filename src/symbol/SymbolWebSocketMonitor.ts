@@ -30,7 +30,6 @@ export class SymbolWebSocketMonitor {
     const protocol = ssl ? 'wss' : 'ws';
     const endPointPort = ssl ? '3001' : '3000';
 
-    console.log(`Connecting to Symbol WebSocket at ${protocol}://${endPointHost}:${endPointPort}/ws`);
     this.client = new WebSocket(`${protocol}://${endPointHost}:${endPointPort}/ws`, { timeout: timeout });
 
     this.client.onclose = (event: WebSocket.CloseEvent) => {
@@ -47,7 +46,6 @@ export class SymbolWebSocketMonitor {
         if (this.isFirstMessage) {
           if (data.uid) {
             this._uid = data.uid;
-            console.log('UID saved:', this._uid);
             // pending subscribeをすべて送信 / Send all pending subscribes
             this.pendingSubscribes.forEach(({ subscribePath }) => {
               this.client.send(JSON.stringify({ uid: this._uid, subscribe: subscribePath }));
@@ -62,7 +60,12 @@ export class SymbolWebSocketMonitor {
           this.eventCallbacks[channel].forEach((cb) => cb(data));
         }
       } catch (e) {
-        console.warn('Failed to parse message:', e);
+        if (this.errorCallbacks.length > 0) {
+          const errorEvent = { ...(e instanceof Error ? e : { message: String(e) }) } as WebSocket.ErrorEvent;
+          this.errorCallbacks.forEach((cb) => cb(errorEvent));
+        } else {
+          throw e;
+        }
       }
     };
   }

@@ -28,7 +28,6 @@ export class NemWebSocketMonitor {
     const endPointPort = ssl ? '7779' : '7778';
 
     this.client = new Client({
-      debug: (str) => console.debug(str),
       connectionTimeout: timeout,
       reconnectDelay: timeout,
       webSocketFactory: () => new WebSocket(`${protocol}://${endPointHost}:${endPointPort}/w/messages/websocket`),
