@@ -2,6 +2,10 @@ import WebSocket from 'isomorphic-ws';
 import { SymbolChannel, SymbolWebSocketOptions } from './symbol.types';
 import { symbolChannelPaths } from './symbolChannelPaths';
 
+// WebSocket readyState 定数のフォールバック（テスト環境ではモックに定数がないことがあるため）
+const WS_OPEN = (WebSocket as any).OPEN ?? 1;
+const WS_CONNECTING = (WebSocket as any).CONNECTING ?? 0;
+
 /**
  * Symbolウェブソケットモニタークラス / Symbol WebSocket Monitor Class
  */
@@ -119,7 +123,7 @@ export class SymbolWebSocketMonitor {
     }
 
     // サブスクライブを実行 / Execute subscription
-    if (this.client.readyState === WebSocket.OPEN) {
+    if (this.client.readyState === WS_OPEN) {
       this.client.send(JSON.stringify({ uid: this._uid, subscribe: subscribePath }));
     }
   }
@@ -139,7 +143,7 @@ export class SymbolWebSocketMonitor {
     delete this.eventCallbacks[subscribePath];
 
     // アンサブスクライブを実行 / Execute unsubscription
-    if (this._uid && this.client.readyState === WebSocket.OPEN) {
+    if (this._uid && this.client.readyState === WS_OPEN) {
       this.client.send(JSON.stringify({ uid: this._uid, unsubscribe: subscribePath }));
     }
   }
@@ -154,7 +158,7 @@ export class SymbolWebSocketMonitor {
     this.errorCallbacks = [];
 
     // WebSocketを閉じる / Close WebSocket
-    if (this.client.readyState === WebSocket.OPEN || this.client.readyState === WebSocket.CONNECTING) {
+    if (this.client.readyState === WS_OPEN || this.client.readyState === WS_CONNECTING) {
       this.client.close();
     }
 

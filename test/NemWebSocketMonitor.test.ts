@@ -7,8 +7,9 @@ vi.mock('@stomp/stompjs', () => ({
   Client: function ClientMock() {
     return {
       activate: vi.fn(),
-      subscribe: vi.fn(),
+      subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })),
       unsubscribe: vi.fn(),
+      deactivate: vi.fn(),
       onWebSocketError: undefined,
       onWebSocketClose: undefined,
       onConnect: undefined,
@@ -131,5 +132,41 @@ describe('NemWebSocketMonitor', () => {
     monitor.client.onWebSocketClose({ type: 'close' });
     expect(errorCb).toHaveBeenCalled();
     expect(closeCb).toHaveBeenCalled();
+  });
+
+  describe('NemWebSocketMonitor extra behavior', () => {
+    let monitor: NemWebSocketMonitor;
+    let clientMock: any;
+
+    beforeEach(() => {
+      // @ts-ignore
+      monitor = new NemWebSocketMonitor(defaultOptions);
+      // @ts-ignore
+      clientMock = monitor.client;
+    });
+
+    it('SSL=true でインスタンス化でき、例外をスローしない / can be instantiated with ssl=true without throwing', () => {
+      const options: NemWebSocketOptions = { host: 'example', timeout: 1234, ssl: true };
+      expect(() => new NemWebSocketMonitor(options)).not.toThrow();
+    });
+
+    it('切断すると、すべてのサブスクリプションが解除され、クライアントが無効化されます / disconnect unsubscribes all subscriptions and deactivates client', () => {
+      // @ts-ignore
+      monitor.isConnected = true;
+      const unsubSpy = vi.fn();
+      // @ts-ignore
+      monitor.subscriptions.set('/test', { unsubscribe: unsubSpy });
+      // ensure client has deactivate
+      // @ts-ignore
+      clientMock.deactivate = vi.fn();
+
+      monitor.disconnect();
+
+      expect(unsubSpy).toHaveBeenCalled();
+      // @ts-ignore
+      expect(clientMock.deactivate).toHaveBeenCalled();
+      // @ts-ignore
+      expect(monitor.subscriptions.size).toBe(0);
+    });
   });
 });

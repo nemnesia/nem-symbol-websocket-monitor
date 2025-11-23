@@ -16,6 +16,7 @@ vi.mock('isomorphic-ws', () => {
         onclose: oncloseMock,
         onerror: onerrorMock,
         onmessage: onmessageMock,
+        close: vi.fn(),
       };
     },
   };
@@ -69,6 +70,8 @@ describe('SymbolWebSocketMonitor', () => {
     // @ts-ignore
     monitor._uid = 'test-uid';
     // @ts-ignore
+    monitor.client.readyState = 1; // simulate OPEN
+    // @ts-ignore
     monitor.on('block', vi.fn());
     expect(sendMock).toHaveBeenCalled();
   });
@@ -76,6 +79,8 @@ describe('SymbolWebSocketMonitor', () => {
   it('unsubscribe時にsendが呼び出されるべきである / should call send for unsubscribe', () => {
     // @ts-ignore
     monitor._uid = 'test-uid';
+    // @ts-ignore
+    monitor.client.readyState = 1; // simulate OPEN
     // @ts-ignore
     monitor.off('block');
     expect(sendMock).toHaveBeenCalled();
@@ -153,5 +158,78 @@ describe('SymbolWebSocketMonitor', () => {
     monitor._uid = null;
     // @ts-ignore
     expect(() => monitor.off('block')).not.toThrow();
+  });
+
+  describe('SymbolWebSocketMonitor extra branches', () => {
+    let monitor: SymbolWebSocketMonitor;
+    let clientMock: any;
+
+    beforeEach(() => {
+      // @ts-ignore
+      monitor = new SymbolWebSocketMonitor(defaultOptions);
+      // @ts-ignore
+      clientMock = monitor.client;
+      // reset mocks if present
+      if (clientMock.send && (clientMock.send as any).mockClear) (clientMock.send as any).mockClear();
+      if (clientMock.close && (clientMock.close as any).mockClear) (clientMock.close as any).mockClear();
+      // Ensure the mocked WebSocket class provides OPEN/CONNECTING constants
+      // so that comparisons in the module under test behave as expected.
+
+      const wsMod = require('isomorphic-ws');
+      if (wsMod && wsMod.default) {
+        // @ts-ignore
+        wsMod.default.OPEN = 1;
+        // @ts-ignore
+        wsMod.default.CONNECTING = 0;
+      }
+    });
+
+    it('SSL=true でインスタンス化できます / can be instantiated with ssl=true', () => {
+      const options: SymbolWebSocketOptions = { host: 'example', timeout: 2000, ssl: true };
+      expect(() => new SymbolWebSocketMonitor(options)).not.toThrow();
+    });
+
+    it('on sends when uid present and socket OPEN', () => {
+      // @ts-ignore
+      monitor._uid = 'uid-1';
+      // @ts-ignore
+      monitor.client.readyState = 1; // WebSocket.OPEN
+      // @ts-ignore
+      monitor.on('block', vi.fn());
+      // @ts-ignore
+      expect(monitor.client.send).toHaveBeenCalled();
+    });
+
+    it('uidが存在しソケットがOPEN状態の場合、登録解除を送信する / off sends unsubscribe when uid present and socket OPEN', () => {
+      // @ts-ignore
+      monitor._uid = 'uid-2';
+      // @ts-ignore
+      monitor.client.readyState = 1; // WebSocket.OPEN
+      // @ts-ignore
+      monitor.off('block');
+      // @ts-ignore
+      expect(monitor.client.send).toHaveBeenCalled();
+    });
+
+    it('disconnect は OPEN 時にソケットを閉じる / disconnect closes socket when OPEN', () => {
+      // @ts-ignore
+      monitor._uid = 'uid-3';
+      // @ts-ignore
+      monitor.isFirstMessage = false;
+      // @ts-ignore
+      monitor.client.readyState = 1; // OPEN
+      // ensure close exists
+      // @ts-ignore
+      monitor.client.close = vi.fn();
+
+      monitor.disconnect();
+
+      // @ts-ignore
+      expect(monitor.client.close).toHaveBeenCalled();
+      // @ts-ignore
+      expect(monitor.uid).toBeNull();
+      // @ts-ignore
+      expect(monitor.isFirstMessage).toBe(true);
+    });
   });
 });
