@@ -53,6 +53,7 @@
     "test": "vitest run **/*[^e2e].test.ts",
     "test:watch": "vitest --watch **/*[^e2e].test.ts",
     "test:coverage": "vitest run --coverage **/*[^e2e].test.ts",
+    "test:ui": "vitest --ui --coverage **/*[^e2e].test.ts",
     "publish:dryrun": "npm publish --dry-run",
     "publish:release": "npm run build && npm publish"
   },
