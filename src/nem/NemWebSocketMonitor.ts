@@ -1,4 +1,4 @@
-import { Client } from '@stomp/stompjs';
+import { Client, StompSubscription } from '@stomp/stompjs';
 import WebSocket from 'isomorphic-ws';
 import { NemChannel, NemWebSocketOptions } from './nem.types';
 import { nemChannelPaths } from './nemChannelPaths';
@@ -9,12 +9,11 @@ import { nemChannelPaths } from './nemChannelPaths';
 export class NemWebSocketMonitor {
   private client: Client;
   private isConnected = false;
-  // eslint-disable-next-line no-unused-vars
+  private subscriptions: Map<string, StompSubscription> = new Map();
   private pendingSubscribes: { subscribePath: string; callback: (message: string) => void }[] = [];
-  // eslint-disable-next-line no-unused-vars
   private errorCallbacks: ((err: WebSocket.ErrorEvent) => void)[] = [];
-  // eslint-disable-next-line no-unused-vars
   private onCloseCallback: (event: WebSocket.CloseEvent) => void = () => {};
+  
   /**
    * コンストラクタ / Constructor
    * @param options NEMウェブソケットオプション / NEM WebSocket Options
@@ -27,29 +26,40 @@ export class NemWebSocketMonitor {
     const protocol = ssl ? 'wss' : 'ws';
     const endPointPort = ssl ? '7779' : '7778';
 
+    // クライアントを作成 / Create client
     this.client = new Client({
       connectionTimeout: timeout,
       reconnectDelay: timeout,
       webSocketFactory: () => new WebSocket(`${protocol}://${endPointHost}:${endPointPort}/w/messages/websocket`),
     });
 
+    // クライアントエラー時の処理 / On client error
     this.client.onWebSocketError = (event: WebSocket.ErrorEvent) => {
       this.errorCallbacks.forEach((cb) => cb(event));
     };
 
+    // クライアントクローズ時の処理 / On client close
     this.client.onWebSocketClose = (event: WebSocket.CloseEvent) => {
       this.onCloseCallback(event);
     };
 
+    // クライアント接続時の処理 / On client connect
     this.client.onConnect = () => {
       this.isConnected = true;
       // 保留中のsubscribeをすべて実行 / Execute all pending subscribes
       this.pendingSubscribes.forEach(({ subscribePath, callback }) => {
-        this.client.subscribe(subscribePath, (message) => callback(message.body));
+        const subscription = this.client.subscribe(subscribePath, (message) => callback(message.body));
+        this.subscriptions.set(subscribePath, subscription);
       });
       this.pendingSubscribes = [];
     };
 
+    // クライアント切断時の処理 / On client disconnect
+    this.client.onDisconnect = () => {
+      this.isConnected = false;
+    };
+
+    // クライアントをアクティブ化 / Activate client
     this.client.activate();
   }
 
@@ -59,7 +69,6 @@ export class NemWebSocketMonitor {
    * @param callback コールバック関数 / Callback function
    * @param params パラメータ / Parameters
    */
-  // eslint-disable-next-line no-unused-vars
   on(channel: NemChannel, callback: (message: string) => void, params?: { address?: string }): void {
     const channelPath = nemChannelPaths[channel];
 
@@ -69,20 +78,24 @@ export class NemWebSocketMonitor {
       throw new Error(`Address parameter is required for channel: ${channel}`);
     }
 
+    // サブスクライブパスを決定 / Determine subscribe path
     const subscribePath = typeof channelPath.subscribe === 'function' ? channelPath.subscribe(params?.address) : channelPath.subscribe;
 
+    // 接続されていない場合、保留中のサブスクライブに追加 / If not connected, add to pending subscribes
     if (!this.isConnected) {
       this.pendingSubscribes.push({ subscribePath, callback });
       return;
     }
-    this.client.subscribe(subscribePath, (message) => callback(message.body));
+
+    // サブスクライブを実行 / Execute subscription
+    const subscription = this.client.subscribe(subscribePath, (message) => callback(message.body));
+    this.subscriptions.set(subscribePath, subscription);
   }
 
   /**
    * WebSocketエラーイベント登録 / Register WebSocket error event
    * @param callback エラー時に呼ばれるコールバック / Callback called on error
    */
-  // eslint-disable-next-line no-unused-vars
   public onError(callback: (err: WebSocket.ErrorEvent) => void): void {
     this.errorCallbacks.push(callback);
   }
@@ -91,7 +104,6 @@ export class NemWebSocketMonitor {
    * WebSocketクローズイベント登録 / Register WebSocket close event
    * @param callback クローズ時に呼ばれるコールバック / Callback called on close
    */
-  // eslint-disable-next-line no-unused-vars
   public onClose(callback: (event: WebSocket.CloseEvent) => void): void {
     this.onCloseCallback = callback;
   }
@@ -99,10 +111,32 @@ export class NemWebSocketMonitor {
   /**
    * チャネルアンサブスクメソッド / Channel Unsubscription Method
    * @param channel チャネル名 / Channel name
+   * @param params パラメータ / Parameters
    */
-  off(channel: NemChannel): void {
+  off(channel: NemChannel, params?: { address?: string }): void {
     const channelPath = nemChannelPaths[channel];
-    const subscribePath = typeof channelPath.subscribe === 'function' ? channelPath.subscribe() : channelPath.subscribe;
-    this.client.unsubscribe(subscribePath);
+
+    // サブスクライブパスを決定 / Determine subscribe path
+    const subscribePath = typeof channelPath.subscribe === 'function' ? channelPath.subscribe(params?.address) : channelPath.subscribe;
+
+    // アンサブスクライブを実行 / Execute unsubscription
+    const subscription = this.subscriptions.get(subscribePath);
+    if (subscription) {
+      subscription.unsubscribe();
+      this.subscriptions.delete(subscribePath);
+    }
+  }
+
+  /**
+   * WebSocket接続を切断 / Disconnect WebSocket
+   */
+  disconnect(): void {
+    // すべてのサブスクリプションを解除 / Unsubscribe all subscriptions
+    this.subscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.subscriptions.clear();
+
+    // クライアントを非アクティブ化 / Deactivate client
+    this.client.deactivate();
+    this.isConnected = false;
   }
 }

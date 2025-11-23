@@ -3,7 +3,6 @@ import { SymbolChannel } from './symbol.types';
 /**
  * Symbolチャネルパス定義 / Symbol Channel Path Definitions
  */
-// eslint-disable-next-line no-unused-vars
 export const symbolChannelPaths: Record<SymbolChannel, { subscribe: (address?: string) => string }> = {
   block: { subscribe: () => 'block' },
   finalizedBlock: { subscribe: () => 'finalizedBlock' },

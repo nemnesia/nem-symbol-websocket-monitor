@@ -3,7 +3,6 @@ import { NemChannel } from './nem.types';
 /**
  * NEMチャネルパス定義 / NEM Channel Path Definitions
  */
-// eslint-disable-next-line no-unused-vars
 export const nemChannelPaths: Record<NemChannel, { subscribe: string | ((address?: string) => string); publish?: string }> = {
   newBlock: { subscribe: '/blocks/new' },
   blocks: { subscribe: '/blocks' },
