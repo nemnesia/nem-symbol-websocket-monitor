@@ -1,4 +1,76 @@
 {
   "name": "nem-symbol-websocket-monitor",
-  "packageManager": "yarn@4.11.0"
+  "packageManager": "yarn@4.11.0",
+  "version": "1.0.0",
+  "description": "NEM/Symbol WebSocket Monitor",
+  "keywords": [
+    "nem",
+    "symbol",
+    "blockchain",
+    "websocket",
+    "monitor",
+    "nodejs"
+  ],
+  "author": "ccHarvestasya",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nemnesia/nem-symbol-websocket-monitor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nemnesia/nem-symbol-websocket-monitor/issues"
+  },
+  "homepage": "https://github.com/nemnesia/nem-symbol-websocket-monitor#readme",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "shx rm -rf dist && rollup -c",
+    "build:tsc": "tsc -p tsconfig.build.json",
+    "build:watch": "rollup -c --watch",
+    "prepublishOnly": "npm run build",
+    "lint": "eslint \"{src,test,e2e}/**/*.ts\" --fix",
+    "format": "prettier --write \"{src,test,e2e}/**/*.ts\"",
+    "test": "vitest run **/*[^e2e].test.ts",
+    "test:watch": "vitest --watch **/*[^e2e].test.ts",
+    "test:coverage": "vitest run --coverage **/*[^e2e].test.ts",
+    "publish:dryrun": "npm publish --dry-run",
+    "publish:release": "npm run build && npm publish"
+  },
+  "dependencies": {
+    "@stomp/stompjs": "^7.2.1",
+    "isomorphic-ws": "^5.0.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "@vitest/coverage-v8": "^4.0.13",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "prettier-plugin-organize-imports": "^4.3.0",
+    "tslib": "^2.8.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
+  },
+  "volta": {
+    "node": "22.21.1",
+    "yarn": "4.11.0"
+  }
 }
