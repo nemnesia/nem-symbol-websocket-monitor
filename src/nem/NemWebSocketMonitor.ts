@@ -7,8 +7,8 @@ import { nemChannelPaths } from './nemChannelPaths';
  * NEMウェブソケットモニタークラス / NEM WebSocket Monitor Class
  */
 export class NemWebSocketMonitor {
-  private client: Client;
-  private isConnected = false;
+  private _client: Client;
+  private _isConnected = false;
   private subscriptions: Map<string, StompSubscription> = new Map();
   private pendingSubscribes: { subscribePath: string; callback: (message: string) => void }[] = [];
   private errorCallbacks: ((err: WebSocket.ErrorEvent) => void)[] = [];
@@ -27,40 +27,54 @@ export class NemWebSocketMonitor {
     const endPointPort = ssl ? '7779' : '7778';
 
     // クライアントを作成 / Create client
-    this.client = new Client({
+    this._client = new Client({
       connectionTimeout: timeout,
-      reconnectDelay: timeout,
+      reconnectDelay: 0, // 再接続はモジュール使用者に委ねるため無効化 / Disable reconnection as it is left to the discretion of module users.
       webSocketFactory: () => new WebSocket(`${protocol}://${endPointHost}:${endPointPort}/w/messages/websocket`),
     });
 
     // クライアントエラー時の処理 / On client error
-    this.client.onWebSocketError = (event: WebSocket.ErrorEvent) => {
+    this._client.onWebSocketError = (event: WebSocket.ErrorEvent) => {
       this.errorCallbacks.forEach((cb) => cb(event));
     };
 
     // クライアントクローズ時の処理 / On client close
-    this.client.onWebSocketClose = (event: WebSocket.CloseEvent) => {
+    this._client.onWebSocketClose = (event: WebSocket.CloseEvent) => {
       this.onCloseCallback(event);
     };
 
     // クライアント接続時の処理 / On client connect
-    this.client.onConnect = () => {
-      this.isConnected = true;
+    this._client.onConnect = () => {
+      this._isConnected = true;
       // 保留中のsubscribeをすべて実行 / Execute all pending subscribes
       this.pendingSubscribes.forEach(({ subscribePath, callback }) => {
-        const subscription = this.client.subscribe(subscribePath, (message) => callback(message.body));
+        const subscription = this._client.subscribe(subscribePath, (message) => callback(message.body));
         this.subscriptions.set(subscribePath, subscription);
       });
       this.pendingSubscribes = [];
     };
 
     // クライアント切断時の処理 / On client disconnect
-    this.client.onDisconnect = () => {
-      this.isConnected = false;
+    this._client.onDisconnect = () => {
+      this._isConnected = false;
     };
 
     // クライアントをアクティブ化 / Activate client
-    this.client.activate();
+    this._client.activate();
+  }
+
+  /**
+   * クライアントインスタンスを取得 / Get client instance
+   */
+  public get client(): Client {
+    return this._client;
+  }
+
+  /**
+   * 接続状態を取得 / Get connection status
+   */
+  public get isConnected(): boolean {
+    return this._isConnected;
   }
 
   /**
@@ -80,15 +94,18 @@ export class NemWebSocketMonitor {
 
     // サブスクライブパスを決定 / Determine subscribe path
     const subscribePath = typeof channelPath.subscribe === 'function' ? channelPath.subscribe(params?.address) : channelPath.subscribe;
+    if (!subscribePath) {
+      throw new Error(`Subscribe path could not be determined for channel: ${channel}`);
+    }
 
     // 接続されていない場合、保留中のサブスクライブに追加 / If not connected, add to pending subscribes
-    if (!this.isConnected) {
+    if (!this._isConnected) {
       this.pendingSubscribes.push({ subscribePath, callback });
       return;
     }
 
     // サブスクライブを実行 / Execute subscription
-    const subscription = this.client.subscribe(subscribePath, (message) => callback(message.body));
+    const subscription = this._client.subscribe(subscribePath, (message) => callback(message.body));
     this.subscriptions.set(subscribePath, subscription);
   }
 
@@ -118,6 +135,9 @@ export class NemWebSocketMonitor {
 
     // サブスクライブパスを決定 / Determine subscribe path
     const subscribePath = typeof channelPath.subscribe === 'function' ? channelPath.subscribe(params?.address) : channelPath.subscribe;
+    if (!subscribePath) {
+      throw new Error(`Subscribe path could not be determined for channel: ${channel}`);
+    }
 
     // アンサブスクライブを実行 / Execute unsubscription
     const subscription = this.subscriptions.get(subscribePath);
@@ -129,11 +149,11 @@ export class NemWebSocketMonitor {
       // テストや一部のクライアント実装で期待される動作を満たすため
       // (実際のSTOMPクライアントのAPIに依存するため副作用は最小限にする)
       // @ts-ignore
-      if (typeof this.client.unsubscribe === 'function') {
+      if (typeof this._client.unsubscribe === 'function') {
         // 一部のクライアント実装はサブスクリプションIDやパスを受け取るため、パスを渡す
         // テストでは呼び出しが発生することを確認するため十分
         // @ts-ignore
-        this.client.unsubscribe(subscribePath);
+        this._client.unsubscribe(subscribePath);
       }
     }
   }
@@ -147,7 +167,7 @@ export class NemWebSocketMonitor {
     this.subscriptions.clear();
 
     // クライアントを非アクティブ化 / Deactivate client
-    this.client.deactivate();
-    this.isConnected = false;
+    this._client.deactivate();
+    this._isConnected = false;
   }
 }

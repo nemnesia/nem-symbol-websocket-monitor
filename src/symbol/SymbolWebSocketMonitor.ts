@@ -3,14 +3,14 @@ import { SymbolChannel, SymbolWebSocketOptions } from './symbol.types';
 import { symbolChannelPaths } from './symbolChannelPaths';
 
 // WebSocket readyState 定数のフォールバック（テスト環境ではモックに定数がないことがあるため）
-const WS_OPEN = (WebSocket as any).OPEN ?? 1;
-const WS_CONNECTING = (WebSocket as any).CONNECTING ?? 0;
+const WS_OPEN = WebSocket.OPEN ?? 1;
+const WS_CONNECTING = WebSocket.CONNECTING ?? 0;
 
 /**
  * Symbolウェブソケットモニタークラス / Symbol WebSocket Monitor Class
  */
 export class SymbolWebSocketMonitor {
-  private client: WebSocket;
+  private _client: WebSocket;
   private _uid: string | null = null;
   private isFirstMessage = true;
   private eventCallbacks: { [event: string]: ((message: WebSocket.MessageEvent) => void)[] } = {};
@@ -31,20 +31,22 @@ export class SymbolWebSocketMonitor {
     const endPointPort = ssl ? '3001' : '3000';
 
     // クライアントを作成 / Create client
-    this.client = new WebSocket(`${protocol}://${endPointHost}:${endPointPort}/ws`, { timeout: timeout });
+    this._client = new WebSocket(`${protocol}://${endPointHost}:${endPointPort}/ws`, { timeout: timeout });
+    // 再接続はモジュール使用者に委ねるため、内部での再接続ロジックは実装しない
+    // Reconnection is left to the module user, so no internal reconnection logic is implemented.
 
     // クライアント接続時の処理 / On client connect
-    this.client.onclose = (event: WebSocket.CloseEvent) => {
+    this._client.onclose = (event: WebSocket.CloseEvent) => {
       this.onCloseCallback(event);
     };
 
     // エラー発生時の処理 / On error occurred
-    this.client.onerror = (err: WebSocket.ErrorEvent) => {
+    this._client.onerror = (err: WebSocket.ErrorEvent) => {
       this.errorCallbacks.forEach((cb) => cb(err));
     };
 
     // メッセージ受信時の処理 / On message received
-    this.client.onmessage = (message: WebSocket.MessageEvent) => {
+    this._client.onmessage = (message: WebSocket.MessageEvent) => {
       try {
         const data = JSON.parse(message.data.toString());
         if (this.isFirstMessage) {
@@ -52,7 +54,7 @@ export class SymbolWebSocketMonitor {
             this._uid = data.uid;
             // pending subscribeをすべて送信 / Send all pending subscribes
             this.pendingSubscribes.forEach(({ subscribePath }) => {
-              this.client.send(JSON.stringify({ uid: this._uid, subscribe: subscribePath }));
+              this._client.send(JSON.stringify({ uid: this._uid, subscribe: subscribePath }));
             });
             this.pendingSubscribes = [];
           }
@@ -77,8 +79,22 @@ export class SymbolWebSocketMonitor {
   /**
    * UID
    */
-  get uid(): string | null {
+  public get uid(): string | null {
     return this._uid;
+  }
+
+  /**
+   * クライアントインスタンスを取得 / Get client instance
+   */
+  public get client(): WebSocket {
+    return this._client;
+  }
+
+  /**
+   * 接続状態を取得 / Get connection status
+   */
+  public get isConnected(): boolean {
+    return this._client.readyState === WS_OPEN;
   }
 
   /**
@@ -108,6 +124,9 @@ export class SymbolWebSocketMonitor {
 
     // サブスクライブパスを決定 / Determine subscribe path
     const subscribePath = typeof channelPath.subscribe === 'function' ? channelPath.subscribe(params?.address) : channelPath.subscribe;
+    if (!subscribePath) {
+      throw new Error(`Subscribe path could not be determined for channel: ${channel}`);
+    }
 
     // コールバック登録 / Register callback
     if (!this.eventCallbacks[subscribePath]) {
@@ -123,8 +142,8 @@ export class SymbolWebSocketMonitor {
     }
 
     // サブスクライブを実行 / Execute subscription
-    if (this.client.readyState === WS_OPEN) {
-      this.client.send(JSON.stringify({ uid: this._uid, subscribe: subscribePath }));
+    if (this._client.readyState === WS_OPEN) {
+      this._client.send(JSON.stringify({ uid: this._uid, subscribe: subscribePath }));
     }
   }
 
@@ -138,13 +157,16 @@ export class SymbolWebSocketMonitor {
 
     // サブスクライブパスを決定 / Determine subscribe path
     const subscribePath = typeof channelPath.subscribe === 'function' ? channelPath.subscribe(params?.address) : channelPath.subscribe;
+    if (!subscribePath) {
+      throw new Error(`Subscribe path could not be determined for channel: ${channel}`);
+    }
 
     // コールバックをクリーンアップ / Cleanup callbacks
     delete this.eventCallbacks[subscribePath];
 
     // アンサブスクライブを実行 / Execute unsubscription
-    if (this._uid && this.client.readyState === WS_OPEN) {
-      this.client.send(JSON.stringify({ uid: this._uid, unsubscribe: subscribePath }));
+    if (this._uid && this._client.readyState === WS_OPEN) {
+      this._client.send(JSON.stringify({ uid: this._uid, unsubscribe: subscribePath }));
     }
   }
 
@@ -158,8 +180,8 @@ export class SymbolWebSocketMonitor {
     this.errorCallbacks = [];
 
     // WebSocketを閉じる / Close WebSocket
-    if (this.client.readyState === WS_OPEN || this.client.readyState === WS_CONNECTING) {
-      this.client.close();
+    if (this._client.readyState === WS_OPEN || this._client.readyState === WS_CONNECTING) {
+      this._client.close();
     }
 
     this._uid = null;
