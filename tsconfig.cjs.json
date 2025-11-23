@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "dist/cjs",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "declaration": true,
+    "declarationDir": "dist/cjs/types"
+  },
+  "include": ["./src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

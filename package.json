@@ -42,10 +42,12 @@
     "yarn": "4.11.0"
   },
   "scripts": {
-    "build": "shx rm -rf dist && rollup -c",
-    "build:tsc": "tsc -p tsconfig.build.json",
-    "build:watch": "rollup -c --watch",
-    "prepublishOnly": "npm run build",
+    "clean": "shx rm -rf dist",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs && npm run build:umd",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:umd": "vite build",
+    "build:watch": "vite build --watch",
     "lint": "eslint \"{src,test,e2e}/**/*.ts\" --fix",
     "format": "prettier --write \"{src,test,e2e}/**/*.ts\"",
     "test": "vitest run **/*[^e2e].test.ts",
@@ -70,9 +72,12 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.6.2",
     "prettier-plugin-organize-imports": "^4.3.0",
+    "shx": "^0.4.0",
     "tslib": "^2.8.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "vite-plugin-dts": "^4.5.4",
     "vitest": "^4.0.13"
   }
 }
